@@ -93,4 +93,169 @@ prompt> ./test-getreadcounts.sh -s
 The other usual testing flags are also available. See [the testing
 README](https://github.com/remzi-arpacidusseau/ostep-projects/blob/master/tester/README.md)
 for details.
+---
+
+# Adding `getreadcount()` System Call in xv6
+
+This guide documents the exact steps to implement a new system call in xv6 that returns how many times `read()` has been invoked.
+
+---
+
+## Goal
+
+Create a system call:
+
+```c
+int getreadcount(void);
+```
+
+Which returns a counter incremented every time `read()` is called.
+
+---
+
+## Step 1: Add Global Counter
+
+File: `sysfile.c`
+
+```c
+int readcount = 0;
+```
+
+**Why:**
+
+- We need a single, shared variable that persists in kernel memory while the OS is running.
+- Global scope ensures all processes see the same counter.
+
+---
+
+## Step 2: Increment Counter in `sys_read`
+
+File: `sysfile.c`
+
+```c
+int sys_read(void)
+{
+    readcount++;
+    
+    int fd, n;
+    char *p;
+    ...
+}
+```
+
+---
+
+## Step 3: Implement New Syscall
+
+File: `sysfile.c`
+
+```c
+int sys_getreadcount(void)
+{
+    return readcount;
+}
+```
+
+**Why:**
+
+- This is the actual kernel function executed when the syscall is invoked.
+- It returns the current value of the counter.
+
+---
+
+## Step 4: Declare the Function
+
+File: `defs.h`
+
+```c
+int sys_getreadcount(void);
+```
+
+**Why:**
+
+- Allows other kernel files (like `syscall.c`) to know this function exists.
+
+**If we skip this:**
+
+- Compilation error: unknown function reference.
+
+---
+
+## Step 5: Assign Syscall Number
+
+File: `syscall.h`
+
+```c
+#define SYS_getreadcount 22
+```
+
+**Why:**
+
+- System calls are identified by numbers placed in the `EAX` register.
+- This number is how the kernel knows which syscall is requested.
+
+**If we skip this:**
+
+- The syscall cannot be identified → wrong function or crash.
+
+---
+
+## Step 6: Add to Syscall Table
+
+File: `syscall.c`
+
+```c
+[SYS_getreadcount] sys_getreadcount,
+```
+
+**Why:**
+
+- This maps syscall number → kernel function.
+- `syscall()` uses this table to dispatch calls.
+
+**If we skip this:**
+
+- Kernel receives the syscall number but cannot find the function → returns error or crashes.
+
+---
+
+## Step 7: Add User Stub
+
+File: `usys.S`
+
+```asm
+SYSCALL(getreadcount)
+```
+
+**Why:**
+
+- Generates assembly code that:
+  - loads syscall number into `EAX`
+  - triggers `int 64`
+- This is the bridge from user space to kernel.
+
+**If we skip this:**
+
+- User program cannot trigger the syscall → linker error or undefined reference.
+
+---
+
+## Step 8: Add User Declaration
+
+File: `user.h`
+
+```c
+int getreadcount(void);
+```
+
+**Why:**
+
+- Lets user programs call the function normally in C.
+
+**If we skip this:**
+
+- Compiler warning/error: implicit declaration of function.
+
+---
+
 
